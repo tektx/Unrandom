@@ -6,29 +6,34 @@
     A file with a 1 rating is played 1/21 times
     A file with a 2 rating is played 4/21 times
     A file with a 3 rating is played 16/21 times
+
+    To Do:
+    Change file selection algorithm; it currently generates a number 1-3, then selects a file in that range.
+        Instead, it should only take one randomization to select the file.
+    Check if a file no longer exists.
+    Loop the options page so the entire script doesn't need to be rerun to open a new file.
 """
 
 __author__ = 'tektx'
 
-import pymysql as db
+import pymysql
 import os
-import sys
-import string
-import array
 import random
 
-DB_CONN = db.connect(user='root', password='password', database='ratings')
+DB_CONN = pymysql.connect(user='root', password='password', database='ratings')
 CURSOR = DB_CONN.cursor()
 CUR_DIR = os.getcwd()
 FOLDER = os.path.relpath(".", "..")
 PUNCTUATION = '''!()-[]{};:'"\,<>. /?@#$%^&*_~'''
+TYPE_VIDEO = (".avi", ".wmv", ".mkv", ".mp4")
+# TYPE_AUDIO = (".mp3")
 file_list = []
 
 
 def list_files():
     for root, dirs, files in os.walk(CUR_DIR):
         for file_name in files:
-            if file_name.endswith((".avi", ".wmv", ".mkv", ".mp4")):
+            if file_name.endswith(TYPE_VIDEO):
                 # print(os.path.abspath(file_name))
                 file_list.append(root + "\\" + file_name)
 
@@ -54,7 +59,7 @@ def main():
         if char not in PUNCTUATION:
             folder_name += char.lower()
 
-    choice = input("1) Build ratings database, 2) Rate files, 3) Open random file")
+    choice = input("1) Build ratings database\n2) Rate files\n3) Open random file\n")
 
     if choice == "1":
         print("Building database")
@@ -62,10 +67,11 @@ def main():
         if CURSOR.fetchone():
             print("Table exists")
         else:
-            CURSOR.execute("CREATE TABLE IF NOT EXISTS " + folder_name + " (id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY, "
-                                                                         "rating INT(1) UNSIGNED, "
-                                                                         "filepath VARCHAR(500) NOT NULL UNIQUE,"
-                                                                         "filename VARCHAR(500) NOT NULL);")
+            CURSOR.execute("CREATE TABLE IF NOT EXISTS " + folder_name +
+                           "(id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY, "
+                           "rating INT(1) UNSIGNED, "
+                           "filepath VARCHAR(500) NOT NULL UNIQUE,"
+                           "filename VARCHAR(500) NOT NULL);")
         for file in file_list:
             print("Adding " + file)
             file_escaped = file.replace('\\', '\\\\')
@@ -94,6 +100,9 @@ def main():
         selected_file = files[random.randrange(0, selection_length-1)][0]
         print(selected_file)
         os.startfile(selected_file)
+
+        # Loop back to main selection so a new file can be opened without rerunning the script.
+        main()
 
     else:
         print("Invalid choice")
