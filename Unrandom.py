@@ -2,16 +2,9 @@
 
     This script creates a SQL table comprised of video files and their associated ratings
     A file's rating influences how often it is played in a pseudo-random fashion
-    A file with a 0 rating is not played randomly
-    A file with a 1 rating is played 1/21 times
-    A file with a 2 rating is played 4/21 times
-    A file with a 3 rating is played 16/21 times
 
     To Do:
-    Change file selection algorithm; it currently generates a number 1-3, then selects a file in that range.
-        Instead, it should only take one randomization to select the file.
     Check if a file no longer exists.
-    Loop the options page so the entire script doesn't need to be rerun to open a new file.
 """
 
 __author__ = 'tektx'
@@ -38,18 +31,26 @@ def list_files():
                 file_list.append(root + "\\" + file_name)
 
 
-def random_rating():
+def get_adjusted_count(folder_name):
+    # User-provided values to determine the weight of higher ratings
+    # Default: File rated 2 is selected 4x as often as a file rated 1; file rated 3 is selected 4x as often as a 2
     two_weight = 4
     three_weight = 4
-    max_range = 1 + two_weight + three_weight*two_weight
-    random_num = random.randrange(1, max_range)
-    print("Range: 1-" + str(max_range) + ": " + str(random_num))
-    if random_num == 1:
-        return 1
-    elif random_num <= two_weight+1:
-        return 2
+
+    CURSOR.execute("SELECT COUNT(*) FROM " + folder_name + " WHERE rating = 1")
+    file_count_ones = CURSOR.fetchone()[0]
+    CURSOR.execute("SELECT COUNT(*) FROM " + folder_name + " WHERE rating = 2")
+    file_count_twos = file_count_ones + CURSOR.fetchone()[0]*two_weight
+    CURSOR.execute("SELECT COUNT(*) FROM " + folder_name + " WHERE rating = 3")
+    file_count_threes = file_count_twos + CURSOR.fetchone()[0]*two_weight*three_weight
+    # Generate a random number to determine the rating level of the file to open
+    random_number = random.randrange(1, file_count_threes)
+    if random_number <= file_count_ones:
+        return "1"
+    elif random_number <= file_count_twos:
+        return "2"
     else:
-        return 3
+        return "3"
 
 
 def main():
@@ -93,12 +94,14 @@ def main():
             i += 1
 
     elif choice == "3":
-        # print("Rating: " + str(random_rating()))
-        CURSOR.execute("SELECT filepath FROM " + folder_name + " WHERE rating = " + str(random_rating()) + ";")
+        selected_rating = get_adjusted_count(folder_name)
+        CURSOR.execute("SELECT filepath FROM " + folder_name + " WHERE rating = " + selected_rating + ";")
         files = CURSOR.fetchall()
-        selection_length = len(files)
-        selected_file = files[random.randrange(0, selection_length-1)][0]
-        print(selected_file)
+        files_length = len(files)
+        selected_file = files[random.randrange(0, files_length-1)][0]
+        # CURSOR.execute("SELECT filename FROM " + folder_name + " WHERE filepath LIKE " + selected_file + ";")
+        # selected_filename = CURSOR.fetchone()[0]
+        print('\n' + "Rating " + selected_rating + ": " + selected_file)
         os.startfile(selected_file)
 
         # Loop back to main selection so a new file can be opened without rerunning the script.
@@ -106,6 +109,7 @@ def main():
 
     else:
         print("Invalid choice")
+        main()
 
 if __name__ == "__main__":
     main()
