@@ -4,8 +4,8 @@ Creates a SQL table comprised of video files and their associated ratings.
 A file's rating influences how often it is played.
 """
 
+import collections
 import csv
-import pymysql
 import os
 import random
 
@@ -13,18 +13,11 @@ __author__ = 'Travis Knight'
 __email__ = 'Travisknight@gmail.com'
 __license__ = 'BSD'
 
-DB_CONN = pymysql.connect(user='root', password='password', database='ratings')
-CURSOR = DB_CONN.cursor()
-CUR_DIR = os.getcwd()
-REL_DIR = os.path.relpath('.', '..')
-PUNCTUATION = '''!()-[]{};:'"\,<>. /?@#$%^&*_~'''
-# TYPE_AUDIO = ('.mp3')
-
 
 def get_files(dirs_to_check, file_types):
     """ Get list of files that match the provided file types
 
-    Parameters:
+    Args:
         dirs_to_check (list[str]): Directories to check for files
         file_types (tuple[str]): File types to include in the return list
 
@@ -41,86 +34,142 @@ def get_files(dirs_to_check, file_types):
     return files_to_add
 
 
-def get_adjusted_count(folder_name):
-    # User-provided values to determine the weight of higher ratings
-    # Default: File rated 2 is selected 4x as often as a file rated 1; file rated 3 is selected 4x as often as a 2
-    two_weight = 4
-    three_weight = 4
+def rate_files(db_file):
+    """ Prompts user for ratings of files in the database
 
-    CURSOR.execute('SELECT COUNT(*) FROM ' + folder_name + ' WHERE rating = 1')
-    file_count_ones = CURSOR.fetchone()[0]
-    CURSOR.execute('SELECT COUNT(*) FROM ' + folder_name + ' WHERE rating = 2')
-    file_count_twos = file_count_ones + CURSOR.fetchone()[0]*two_weight
-    CURSOR.execute('SELECT COUNT(*) FROM ' + folder_name + ' WHERE rating = 3')
-    file_count_threes = file_count_twos + CURSOR.fetchone()[0]*two_weight*three_weight
+    Args:
+        db_file (str): Database file
+    """
+    # Read in files from the database
+    ratings_dict = get_ratings_dict(db_file)
+
+    # Prompt user to rate any unrated files
+    for k, v in ratings_dict.items():
+        rating = v
+        # print('Rating for ' + k + ': ' + rating)
+        if rating == '-1':
+            prompt_string = 'Enter rating for ' + k + ': '
+            new_rating = input(prompt_string)
+            ratings_dict[k] = new_rating
+
+    # Update database
+    update_db(db_file, ratings_dict)
+
+
+def update_db(db_file, ratings_dict):
+    """ Updates the database file with a dictionary of files and ratings
+
+    Args:
+        db_file (str): Database file
+        ratings_dict (dict): File paths as keys, values as ratings
+    """
+    print('Update database')
+    with open(db_file, 'w', newline='') as outfile:
+        wr = csv.writer(outfile)
+        for k, v in ratings_dict.items():
+            wr.writerow([k, v])
+
+
+def get_ratings_dict(db_file):
+    """ Creates a dictionary from a database file
+
+    Args:
+        db_file (str): Database file
+
+    Returns:
+        dict: File paths as keys, ratings as values
+    """
+    ratings_dict = {}
+    try:
+        with open(db_file, 'r') as infile:
+            reader = csv.reader(infile)
+            for k, v in reader:
+                ratings_dict[k] = v
+    except FileNotFoundError:
+        print('No existing database found')
+    return ratings_dict
+
+
+def rating_to_select(db_file):
+    """ Gets the rating of the file to play
+
+    Get the adjusted count of all files, choose a random number in that range, and return the appropriate rating.
+    Example:
+        Given 100 files of rating 1, 20 files of rating 2, and 10 files of rating 3
+        Rating 1 has weight 1, rating 2 has weight 4, rating 3 has weight 16
+        (100*1) + (20*4) + (10*16) = 340
+        Random number is chosen between 1-340
+        If number is 1<=100, '1' is returned
+        If number is 101<=180, '2' is returned
+        Else rating '3' is returned
+
+    Args:
+        db_file (str): Database file
+
+    Returns:
+        str: Rating to use
+    """
+    weights = collections.OrderedDict()
+    weights['1'] = 1
+    weights['2'] = 4
+    weights['3'] = 16
+    rating_counts = collections.OrderedDict()
+    for k in weights.keys():
+        rating_counts[k] = 0
+    ratings_dict = get_ratings_dict(db_file)
+    adjusted_count = 0
+    for k, v in ratings_dict.items():
+        try:
+            print('File ' + k + ' has rating ' + v)
+            count_to_add = weights[v]
+            rating_counts[v] = rating_counts[v] + count_to_add
+            adjusted_count = adjusted_count + count_to_add
+        except KeyError:
+            print('Rating for ' + k + ' is not in weights dictionary')
+    print('Adjusted count: ' + str(adjusted_count))
+
     # Generate a random number to determine the rating level of the file to open
-    random_number = random.randrange(1, file_count_threes)
-    if random_number <= file_count_ones:
-        return '1'
-    elif random_number <= file_count_twos:
-        return '2'
-    else:
-        return '3'
+    random_number = random.randrange(1, adjusted_count)
+    count = 0
+    for k, v in rating_counts.items():
+        count = count + v
+        if random_number <= count:
+            print('Open file with rating ' + k)
+            return k
+    raise Exception('Random number was not in the expected range')
 
 
-def build_db(folder):
-    print('Building database')
-    CURSOR.execute("SHOW TABLES LIKE '" + folder + "';")
-    if CURSOR.fetchone():
-        print('Table exists')
-    else:
-        CURSOR.execute('CREATE TABLE IF NOT EXISTS ' + folder +
-                       '(id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY, '
-                       'rating INT(1) UNSIGNED, '
-                       'filepath VARCHAR(500) NOT NULL UNIQUE,'
-                       'filename VARCHAR(500) NOT NULL);')
-    for file in file_list:
-        print('Adding ' + file)
-        file_escaped = file.replace('\\', '\\\\')
-        filename_only = file.rsplit('\\', 1)[1]
-        # print(filename_only)
-        CURSOR.execute('INSERT INTO ' + folder + ' (id, rating, filepath, filename) VALUES (NULL, 9, \"' +
-                       file_escaped + '\", \"' + filename_only + '\") ON DUPLICATE KEY UPDATE id=id;')
-    CURSOR.execute('COMMIT;')
+def open_file(db_file):
+    """ Opens a file from the ratings database
 
-
-def rate(folder):
-    CURSOR.execute('SELECT filename from ' + folder + ' WHERE rating = 9;')
-    unrated_file = CURSOR.fetchall()
-    i = 0
-    while i < len(unrated_file):
-        new_rating = input('Enter rating for ' + unrated_file[i][0])
-        CURSOR.execute('UPDATE ' + folder + ' SET rating = ' + new_rating +
-                       ' WHERE filename = \"' + unrated_file[i][0] + '\";')
-        CURSOR.execute('COMMIT;')
-        i += 1
-
-
-def open_file(folder):
-    selected_rating = get_adjusted_count(folder)
-    CURSOR.execute('SELECT filepath FROM ' + folder + ' WHERE rating = ' + selected_rating + ';')
-    files = CURSOR.fetchall()
-    files_length = len(files)
-    selected_file = files[random.randrange(0, files_length-1)][0]
-    print('SELECTED FILE: ' + selected_file)
-    # CURSOR.execute('SELECT filename FROM ' + folder + ' WHERE filepath LIKE ' + selected_file + ';')
-    # selected_filename = CURSOR.fetchone()[0]
-    print('\n' + 'Rating ' + selected_rating + ': ' + selected_file)
-    os.startfile(selected_file)
+    Args:
+        db_file (str): Database file
+    """
+    selected_rating = rating_to_select(db_file)
+    ratings_dict = get_ratings_dict(db_file)
+    files_to_choose_from = [k for k, v in ratings_dict.items() if v == selected_rating]
+    print('Files to choose from: ' + str(files_to_choose_from))
+    files_length = len(files_to_choose_from)
+    random_number = random.randint(0, files_length-1)
+    file_to_open = files_to_choose_from[random_number]
+    print('\n' + 'Rating ' + selected_rating + ': ' + file_to_open)
+    try:
+        os.startfile(file_to_open)
+    except FileNotFoundError:
+        print('Error: File ' + file_to_open + ' not found!')
 
     # Loop back to main selection so a new file can be opened.
     main()
 
 
-def create_db(db_name, dirs_to_check, file_types):
+def create_db(db_file, dirs_to_check, file_types):
     """ Creates the database of files and ratings
 
-    Parameters:
-        db_name (str): Name of the database file
+    Args:
+        db_file (str): Database file
         dirs_to_check (list[str]): Paths of the directories to check for files
         file_types (tuple[str]): File types to add to the database
     """
-    db_file = db_name + '.csv'
     files = get_files(dirs_to_check, file_types)
 
     # Create a dictionary of the found files
@@ -130,24 +179,13 @@ def create_db(db_name, dirs_to_check, file_types):
         new_ratings_dict[f] = '-1'
 
     # Import existing database into a dictionary
-    old_ratings_dict = {}
-    try:
-        with open(db_file, 'r') as infile:
-            reader = csv.reader(infile)
-            for k, v in reader:
-                old_ratings_dict[k] = v
-    except FileNotFoundError:
-        print('No existing database found')
+    old_ratings_dict = get_ratings_dict(db_file)
 
     # Merge the old database into the new one
     new_ratings_dict.update(old_ratings_dict)
 
     # Create a CSV file with the new dictionary
-    print('Create database')
-    with open(db_file, 'w', newline='') as outfile:
-        wr = csv.writer(outfile)
-        for k, v in new_ratings_dict.items():
-            wr.writerow([k, v])
+    update_db(db_file, new_ratings_dict)
 
 
 def main():
@@ -158,21 +196,18 @@ def main():
     db_name = 'Unrandom_db'
     dirs_to_check = [os.getcwd()]
     file_types = ('.avi', '.wmv', '.mkv', '.mp4')
-    folder = ''
-    for char in REL_DIR:
-        if char not in PUNCTUATION:
-            folder += char.lower()
+    db_file = db_name + '.csv'
 
     choice = input('1) Build ratings database\n'
                    '2) Rate files\n'
                    '3) Open random file\n')
 
     if choice == '1':
-        create_db(db_name, dirs_to_check, file_types)
+        create_db(db_file, dirs_to_check, file_types)
     elif choice == '2':
-        rate(folder)
+        rate_files(db_file)
     elif choice == '3':
-        open_file(folder)
+        open_file(db_file)
     else:
         print('Invalid choice')
         main()
