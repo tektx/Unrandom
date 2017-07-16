@@ -4,30 +4,41 @@ Creates a SQL table comprised of video files and their associated ratings.
 A file's rating influences how often it is played.
 """
 
-__author__ = 'Travis Knight'
-__email__ = 'Travisknight@gmail.com'
-__license__ = 'BSD'
-
+import csv
 import pymysql
 import os
 import random
+
+__author__ = 'Travis Knight'
+__email__ = 'Travisknight@gmail.com'
+__license__ = 'BSD'
 
 DB_CONN = pymysql.connect(user='root', password='password', database='ratings')
 CURSOR = DB_CONN.cursor()
 CUR_DIR = os.getcwd()
 REL_DIR = os.path.relpath('.', '..')
 PUNCTUATION = '''!()-[]{};:'"\,<>. /?@#$%^&*_~'''
-TYPE_VIDEO = ('.avi', '.wmv', '.mkv', '.mp4')
 # TYPE_AUDIO = ('.mp3')
-file_list = []
 
 
-def list_files():
-    for root, dirs, files in os.walk(CUR_DIR):
-        for file_name in files:
-            if file_name.endswith(TYPE_VIDEO):
-                # print(os.path.abspath(file_name))
-                file_list.append(root + '\\' + file_name)
+def get_files(dirs_to_check, file_types):
+    """ Get list of files that match the provided file types
+
+    Parameters:
+        dirs_to_check (list[str]): Directories to check for files
+        file_types (tuple[str]): File types to include in the return list
+
+    Returns:
+        list[str]: Files of the provided types in all subdirectories of the provided directory
+    """
+    files_to_add = []
+    for dir_to_check in dirs_to_check:
+        for root, dirs, files in os.walk(dir_to_check):
+            for file_name in files:
+                if file_name.endswith(file_types):
+                    # print(os.path.abspath(file_name))
+                    files_to_add.append(root + '\\' + file_name)
+    return files_to_add
 
 
 def get_adjusted_count(folder_name):
@@ -101,8 +112,52 @@ def open_file(folder):
     main()
 
 
+def create_db(db_name, dirs_to_check, file_types):
+    """ Creates the database of files and ratings
+
+    Parameters:
+        db_name (str): Name of the database file
+        dirs_to_check (list[str]): Paths of the directories to check for files
+        file_types (tuple[str]): File types to add to the database
+    """
+    db_file = db_name + '.csv'
+    files = get_files(dirs_to_check, file_types)
+
+    # Create a dictionary of the found files
+    new_ratings_dict = {}
+    for f in files:
+        print(f)
+        new_ratings_dict[f] = '-1'
+
+    # Import existing database into a dictionary
+    old_ratings_dict = {}
+    try:
+        with open(db_file, 'r') as infile:
+            reader = csv.reader(infile)
+            for k, v in reader:
+                old_ratings_dict[k] = v
+    except FileNotFoundError:
+        print('No existing database found')
+
+    # Merge the old database into the new one
+    new_ratings_dict.update(old_ratings_dict)
+
+    # Create a CSV file with the new dictionary
+    print('Create database')
+    with open(db_file, 'w', newline='') as outfile:
+        wr = csv.writer(outfile)
+        for k, v in new_ratings_dict.items():
+            wr.writerow([k, v])
+
+
 def main():
-    list_files()
+    """ Lists options for user
+
+    :return:
+    """
+    db_name = 'Unrandom_db'
+    dirs_to_check = [os.getcwd()]
+    file_types = ('.avi', '.wmv', '.mkv', '.mp4')
     folder = ''
     for char in REL_DIR:
         if char not in PUNCTUATION:
@@ -113,7 +168,7 @@ def main():
                    '3) Open random file\n')
 
     if choice == '1':
-        build_db(folder)
+        create_db(db_name, dirs_to_check, file_types)
     elif choice == '2':
         rate(folder)
     elif choice == '3':
