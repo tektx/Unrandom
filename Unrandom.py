@@ -120,12 +120,11 @@ def rating_to_select(db_file):
     adjusted_count = 0
     for k, v in ratings_dict.items():
         try:
-            print('File ' + k + ' has rating ' + v)
             count_to_add = weights[v]
             rating_counts[v] = rating_counts[v] + count_to_add
             adjusted_count = adjusted_count + count_to_add
         except KeyError:
-            print('Rating for ' + k + ' is not in weights dictionary')
+            pass
     print('Adjusted count: ' + str(adjusted_count))
 
     # Generate a random number to determine the rating level of the file to open
@@ -148,13 +147,12 @@ def open_file(db_file):
     selected_rating = rating_to_select(db_file)
     ratings_dict = get_ratings_dict(db_file)
     files_to_choose_from = [k for k, v in ratings_dict.items() if v == selected_rating]
-    print('Files to choose from: ' + str(files_to_choose_from))
     files_length = len(files_to_choose_from)
     random_number = random.randint(0, files_length-1)
     file_to_open = files_to_choose_from[random_number]
     print('\n' + 'Rating ' + selected_rating + ': ' + file_to_open)
     try:
-        os.startfile(file_to_open)
+        os.system('start "" "' + file_to_open + '"')
     except FileNotFoundError:
         print('Error: File ' + file_to_open + ' not found!')
 
