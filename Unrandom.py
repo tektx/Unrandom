@@ -1,6 +1,6 @@
 """Unrandom Video Player
 
-Creates a SQL table comprised of video files and their associated ratings.
+Creates a CSV database comprised of video files and their associated ratings.
 A file's rating influences how often it is played.
 """
 
@@ -29,7 +29,6 @@ def get_files(dirs_to_check, file_types):
         for root, dirs, files in os.walk(dir_to_check):
             for file_name in files:
                 if file_name.endswith(file_types):
-                    # print(os.path.abspath(file_name))
                     files_to_add.append(root + '\\' + file_name)
     return files_to_add
 
@@ -46,7 +45,6 @@ def rate_files(db_file):
     # Prompt user to rate any unrated files
     for k, v in ratings_dict.items():
         rating = v
-        # print('Rating for ' + k + ': ' + rating)
         if rating == '-1':
             prompt_string = 'Enter rating for ' + k + ': '
             new_rating = input(prompt_string)
@@ -154,7 +152,7 @@ def open_file(db_file):
     try:
         os.system('start "" "' + file_to_open + '"')
     except FileNotFoundError:
-        print('Error: File ' + file_to_open + ' not found!')
+        print('Error: File ' + file_to_open + ' not found')
 
     # Loop back to main selection so a new file can be opened.
     main()
@@ -188,8 +186,6 @@ def create_db(db_file, dirs_to_check, file_types):
 
 def main():
     """ Lists options for user
-
-    :return:
     """
     db_name = 'Unrandom_db'
     dirs_to_check = [os.getcwd()]
