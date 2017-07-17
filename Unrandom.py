@@ -189,7 +189,7 @@ def main():
     """
     db_name = 'Unrandom_db'
     dirs_to_check = [os.getcwd()]
-    file_types = ('.avi', '.wmv', '.mkv', '.mp4')
+    file_types = ('.avi', '.flv', '.mkv', '.mov', '.mp4', '.mpeg', '.mpg', '.webm', '.wmv')
     db_file = db_name + '.csv'
 
     choice = input('1) Build ratings database\n'
